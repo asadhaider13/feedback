@@ -278,8 +278,11 @@ export class Feedback {
 
         let headers = new Headers();
         headers.append('Content-Type', 'application/json');
-        headers = Object.assign(headers, this._options.headers || {});
-
+        if (this._options.headers) {
+            this._options.headers.forEach((value, key) => {
+                headers.append(key, value);
+            });
+        }
         const data = {
             description: this._form[0]['value'],
             screenshot: this._screenshotCanvas.toDataURL()
