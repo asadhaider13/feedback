@@ -511,7 +511,7 @@ export class Feedback {
         cancelButtonContainer.classList.add('mat-button');
 
         const cancelButton = document.createElement('button');
-        cancelButton.innerText = '<div class="cancelbtn">cancel</div>';
+        cancelButton.innerHTML = '<div class="cancelbtn">cancel</div>';
         cancelButton.type = 'button';
         cancelButton.addEventListener('click', this.close);
         cancelButtonContainer.appendChild(cancelButton);
@@ -525,7 +525,7 @@ export class Feedback {
 
         const draggerContainer = document.createElement('div');
         draggerContainer.className = 'dragger';
-        draggerContainer.innerText = '<i class="material-icons moduleIcon">drag_indicator</i>';
+        draggerContainer.innerHTML = '<i class="material-icons moduleIcon">drag_indicator</i>';
 
         draggerContainer.addEventListener('mousedown', this._dragStart);
         document.addEventListener('mousemove', this._dragDrag);
@@ -536,7 +536,7 @@ export class Feedback {
 
         const highlightButtonContainer = document.createElement('div');
         const highlightButton = document.createElement('button');
-        highlightButton.innerText = '<div class="highlight_fb"><i class="material-icons moduleIcon">highlight</i><br>Highlight</div>';
+        highlightButton.innerHTML = '<div class="highlight_fb"><i class="material-icons moduleIcon">highlight</i><br>Highlight</div>';
         highlightButton.type = 'button';
         highlightButton.addEventListener('click', () => this._state.highlight = true);
         highlightButtonContainer.appendChild(highlightButton);
@@ -544,7 +544,7 @@ export class Feedback {
 
         const blackoutButtonContainer = document.createElement('div');
         const blackoutButton = document.createElement('button');
-        blackoutButton.innerText = '<div class="blackout_fb"><i class="material-icons moduleIcon">brightness_medium</i><br>Blackout</div>';
+        blackoutButton.innerHTML = '<div class="blackout_fb"><i class="material-icons moduleIcon">brightness_medium</i><br>Blackout</div>';
         blackoutButton.type = 'button';
         blackoutButton.addEventListener('click', () => this._state.highlight = false);
         blackoutButtonContainer.appendChild(blackoutButton);
@@ -777,7 +777,7 @@ export class Feedback {
         inner.style.margin = '1px';
 
         const removeButton = document.createElement('button');
-        removeButton.innerText = '<div class="cancel_highlighted"><i class="material-icons">indeterminate_check_box</i></div>';
+        removeButton.innerHTML = '<div class="cancel_highlighted"><i class="material-icons">indeterminate_check_box</i></div>';
         removeButton.style.position = 'absolute';
         removeButton.style.right = '-7px';
         removeButton.style.top = '-7px';
