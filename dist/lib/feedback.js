@@ -3,6 +3,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const html2canvas = require("html2canvas");
 class Feedback {
     constructor(options, html2canvasOptions) {
+        this.close = () => {
+            document.removeEventListener('mousemove', this._dragDrag);
+            document.removeEventListener('mouseup', this._dragStop);
+            document.removeEventListener('mouseup', this._drawStop);
+            document.removeEventListener('mousemove', this._drawDraw);
+            document.removeEventListener('keydown', this._closeListener);
+            document.removeEventListener('mousemove', this._highlightElement);
+            document.removeEventListener('click', this._addHighlightedElement);
+            window.removeEventListener('resize', this._resize);
+            // TODO: Should we remove the inner listeners on close?
+            // https://stackoverflow.com/a/37096563/1994803
+            document.body.removeChild(this._root);
+            this._reset();
+        };
         this._options = {
             classPrefix: 'fb-',
             backgroundOpacity: .5,
@@ -15,7 +29,9 @@ class Feedback {
             footnote: `Go to the Legal Help page to request content changes for legal reasons. `
                 + `Your feedback, additional info, and email will be sent to Feedback. `
                 + `See Privacy Policy and Terms of Service.`,
-            endpoint: 'https://very-api-so-cool.url/'
+            endpoint: 'https://very-api-so-cool.url/',
+            dropdownEndpoint: 'https://very-api-so-cool.url/feedbackType',
+            dropdownLabel: 'Feedback Type'
         };
         this._html2canvasOptions = {
             allowTaint: true
@@ -58,20 +74,6 @@ class Feedback {
         this._checkedPath = `M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-`
             + `1.1-.89-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z`;
         this._uncheckedPath = `M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z`;
-        this.close = () => {
-            document.removeEventListener('mousemove', this._dragDrag);
-            document.removeEventListener('mouseup', this._dragStop);
-            document.removeEventListener('mouseup', this._drawStop);
-            document.removeEventListener('mousemove', this._drawDraw);
-            document.removeEventListener('keydown', this._closeListener);
-            document.removeEventListener('mousemove', this._highlightElement);
-            document.removeEventListener('click', this._addHighlightedElement);
-            window.removeEventListener('resize', this._resize);
-            // TODO: Should we remove the inner listeners on close?
-            // https://stackoverflow.com/a/37096563/1994803
-            document.body.removeChild(this._root);
-            this._reset();
-        };
         this._closeListener = ($event) => {
             if ($event.key === 'Escape') {
                 this.close();
@@ -306,36 +308,27 @@ class Feedback {
     }
     _createSelectLabel() {
         const label = document.createElement('label');
-        label.innerText = 'Select Feedback Area';
+        label.innerText = this._options.dropdownLabel;
         label.className = 'selectlabel';
         return label;
     }
     _createSelectBox() {
-        var request = new XMLHttpRequest();
-        // Open a new connection, using the GET request on the URL endpoint
-        request.open('GET', 'https://ghibliapi.herokuapp.com/films', true);
-        request.onload = function () {
-            var data = JSON.parse(this.response);
-            if (request.status >= 200 && request.status < 400) {
-                data.forEach(movie => {
-                    console.log(movie.title);
+        const select = document.createElement('select');
+        select.name = 'feedbackType';
+        select.id = 'feedbackType';
+        fetch(this._options.dropdownEndpoint, { headers: this.getHeaders() })
+            .then(response => response.json())
+            .then(response => {
+            console.log(response);
+            if (response.result) {
+                response.result.forEach(option => {
+                    const opt = document.createElement("option");
+                    opt.value = option['id'];
+                    opt.text = option['optionText'];
+                    select.add(opt);
                 });
             }
-            else {
-                console.log('error');
-            }
-        };
-        var selectoptions = ['option1', 'option2', 'option3'];
-        const select = document.createElement('select');
-        select.name = 'status';
-        var opt;
-        // console.log(selectoptions);
-        for (var i in selectoptions) {
-            opt = document.createElement("option");
-            opt.text = selectoptions[i];
-            opt.value = selectoptions[i];
-            select.add(opt);
-        }
+        });
         return select;
     }
     _reset() {
@@ -352,23 +345,31 @@ class Feedback {
         root.appendChild(this._createCanvas());
         return root;
     }
-    _send() {
-        this._state.sending = true;
-        this._showSending();
-        let headers = new Headers();
+    getHeaders() {
+        const headers = new Headers();
         headers.append('Content-Type', 'application/json');
         if (this._options.headers) {
             this._options.headers.forEach((value, key) => {
                 headers.append(key, value);
             });
         }
+        return headers;
+    }
+    _send() {
+        this._state.sending = true;
+        this._showSending();
+        const select = document.getElementById('feedbackType');
+        const lookupValueId = select.options[select.selectedIndex].value;
         const data = {
+            browserDetails: 'test-browser-details',
+            url: window.location.href,
+            lookupValueId: lookupValueId,
             description: this._form[0]['value'],
             screenshot: this._screenshotCanvas.toDataURL()
         };
         fetch(this._options.endpoint, {
             method: 'POST',
-            headers: headers,
+            headers: this.getHeaders(),
             body: JSON.stringify(data)
         })
             .then(resp => {

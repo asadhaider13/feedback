@@ -24,6 +24,8 @@ export interface FeedbackOptions {
     allowedTags?: string[];
     footnote?: string;
     endpoint: string;
+    dropdownEndpoint: string;
+    dropdownLabel?: string;
     headers?: any;
 }
 
@@ -87,6 +89,20 @@ interface Helper extends Area {
 
 export class Feedback {
 
+    close = () => {
+        document.removeEventListener('mousemove', this._dragDrag);
+        document.removeEventListener('mouseup', this._dragStop);
+        document.removeEventListener('mouseup', this._drawStop);
+        document.removeEventListener('mousemove', this._drawDraw);
+        document.removeEventListener('keydown', this._closeListener);
+        document.removeEventListener('mousemove', this._highlightElement);
+        document.removeEventListener('click', this._addHighlightedElement);
+        window.removeEventListener('resize', this._resize);
+        // TODO: Should we remove the inner listeners on close?
+        // https://stackoverflow.com/a/37096563/1994803
+        document.body.removeChild(this._root);
+        this._reset();
+    };
     private _options: FeedbackOptions = {
         classPrefix: 'fb-',
         backgroundOpacity: .5,
@@ -100,13 +116,13 @@ export class Feedback {
             `Go to the Legal Help page to request content changes for legal reasons. `
             + `Your feedback, additional info, and email will be sent to Feedback. `
             + `See Privacy Policy and Terms of Service.`,
-        endpoint: 'https://very-api-so-cool.url/'
+        endpoint: 'https://very-api-so-cool.url/',
+        dropdownEndpoint: 'https://very-api-so-cool.url/feedbackType',
+        dropdownLabel: 'Feedback Type'
     };
-
     private _html2canvasOptions: HTML2CanvasOptions = {
         allowTaint: true
     };
-
     private _initState: State = {
         isOpen: false,
         isDragging: false,
@@ -117,14 +133,12 @@ export class Feedback {
         isDrawing: false,
         sending: false
     };
-
     private _initArea: Area = {
         startX: 0,
         startY: 0,
         width: 0,
         height: 0
     };
-
     private _state: State = {...this._initState};
     private _root: HTMLDivElement;
     private _formContainer: HTMLDivElement;
@@ -148,7 +162,6 @@ export class Feedback {
     private _helperElements: HTMLDivElement[] = [];
     private _helpers: Helper[] = [];
     private _helperIdx = 0;
-
     private _drawOptionsPos: Position = {
         startX: 0,
         startY: 0,
@@ -161,12 +174,265 @@ export class Feedback {
             yPos: 0
         }
     };
-
     private _checkedColor = '#4285F4';
     private _uncheckedColor = '#757575';
     private _checkedPath = `M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-`
         + `1.1-.89-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z`;
     private _uncheckedPath = `M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z`;
+    private _closeListener = ($event: KeyboardEvent) => {
+        if ($event.key === 'Escape') {
+            this.close();
+        }
+    };
+    private _toggleScreenshot = ($event: MouseEvent) => {
+        $event.preventDefault();
+        this._state.includeScreenshot = !this._state.includeScreenshot;
+        this._checkbox.checked = this._state.includeScreenshot;
+        this._checkboxSvg.setAttributeNS(null, 'fill', this._state.includeScreenshot ? this._checkedColor : this._uncheckedColor);
+        this._checkboxSvgPath.setAttributeNS(null, 'd', this._state.includeScreenshot ? this._checkedPath : this._uncheckedPath);
+
+        if (!this._state.includeScreenshot) {
+            this._form.removeChild(this._screenshotContainer);
+        } else {
+            this._form.insertBefore(this._createScreenshotContainer(), this._footnoteContainer);
+            this._genScreenshot();
+        }
+    };
+    private _openDrawer = () => {
+        this._state.canDraw = true;
+        this._canvas.classList.add('active');
+        this._formContainer.style.display = 'none';
+        this._root.appendChild(this._createDrawOptions());
+        document.addEventListener('mousemove', this._highlightElement);
+        document.addEventListener('click', this._addHighlightedElement);
+    };
+    private _closeDrawer = () => {
+        this._state.canDraw = false;
+        this._canvas.classList.remove('active');
+        this._root.removeChild(this._drawOptions);
+        this._formContainer.style.display = 'block';
+        document.removeEventListener('mousemove', this._highlightElement);
+        document.removeEventListener('click', this._addHighlightedElement);
+        this._genScreenshot();
+    };
+    private _resize = () => {
+        const width = document.documentElement.scrollWidth;
+        const height = document.documentElement.scrollHeight;
+        this._canvas.width = width;
+        this._canvas.height = height;
+        this._helpersContainer.style.width = `${width}px`;
+        this._helpersContainer.style.height = `${height}px`;
+        this._redraw();
+    };
+    private _dragStart = ($event: MouseEvent) => {
+        if (!this._state.isDragging) {
+            this._state.isDragging = true;
+            this._drawOptionsPos.startX = $event.clientX;
+            this._drawOptionsPos.startY = $event.clientY;
+
+            const rect = this._drawOptions.getBoundingClientRect();
+            this._drawOptionsPos.limits.xNeg = -rect.left;
+            this._drawOptionsPos.limits.xPos = document.documentElement.clientWidth - rect.right;
+            this._drawOptionsPos.limits.yNeg = -rect.top;
+            this._drawOptionsPos.limits.yPos = document.documentElement.clientHeight - rect.bottom;
+        }
+    };
+    private _dragDrag = ($event: MouseEvent) => {
+        if (this._state.isDragging) {
+            $event.preventDefault();
+
+            let nextX = $event.clientX - this._drawOptionsPos.startX;
+            let nextY = $event.clientY - this._drawOptionsPos.startY;
+
+            if (nextX < this._drawOptionsPos.limits.xNeg) {
+                nextX = this._drawOptionsPos.limits.xNeg;
+            }
+
+            if (nextX > this._drawOptionsPos.limits.xPos) {
+                nextX = this._drawOptionsPos.limits.xPos;
+            }
+
+            if (nextY < this._drawOptionsPos.limits.yNeg) {
+                nextY = this._drawOptionsPos.limits.yNeg;
+            }
+
+            if (nextY > this._drawOptionsPos.limits.yPos) {
+                nextY = this._drawOptionsPos.limits.yPos;
+            }
+
+            nextX = Math.round(nextX);
+            nextY = Math.round(nextY);
+
+            this._drawOptionsPos.nextTransform = `translate(${nextX}px, ${nextY}px)`;
+            this._drawOptions.style.transform = `${this._drawOptionsPos.currTransform} ${this._drawOptionsPos.nextTransform}`;
+            this._state.dragged = true;
+        }
+    };
+    private _dragStop = ($event: MouseEvent) => {
+        this._state.isDragging = false;
+        if (this._state.dragged) {
+            this._drawOptionsPos.currTransform = `${this._drawOptionsPos.currTransform} ${this._drawOptionsPos.nextTransform}`;
+            this._state.dragged = false;
+        }
+    };
+    private _drawStart = ($event: MouseEvent) => {
+        if (this._state.canDraw) {
+            this._state.isDrawing = true;
+            this._area = {
+                startX: $event.clientX + document.documentElement.scrollLeft,
+                startY: $event.clientY + document.documentElement.scrollTop,
+                width: 0,
+                height: 0
+            };
+        }
+    };
+    private _drawStop = ($event: MouseEvent) => {
+        if (this._state.canDraw) {
+            this._state.isDrawing = false;
+
+            if (Math.abs(this._area.width) < 6 || Math.abs(this._area.height) < 6) {
+                return;
+            }
+
+            const helper: Helper = {...this._area, highlight: this._state.highlight, index: this._helperIdx++};
+
+            if (helper.width < 0) {
+                helper.startX += helper.width;
+                helper.width *= -1;
+            }
+
+            if (helper.height < 0) {
+                helper.startY += helper.height;
+                helper.height *= -1;
+            }
+
+            this._area = {...this._initArea};
+            this._helperElements.push(this._createHelper(helper));
+            this._helpers.push(helper);
+            this._redraw();
+        }
+    };
+    private _drawDraw = ($event: MouseEvent) => {
+        $event.preventDefault();
+
+        if (this._state.isDrawing) {
+            this._area.width = $event.clientX - this._area.startX + document.documentElement.scrollLeft;
+            this._area.height = $event.clientY - this._area.startY + document.documentElement.scrollTop;
+
+            // TODO: constant '4' should be lineWidth - also should be optional
+            if (this._area.startX + this._area.width > document.documentElement.scrollWidth) {
+                this._area.width = document.documentElement.scrollWidth - this._area.startX - 4;
+            }
+
+            if (this._area.startX + this._area.width < 0) {
+                this._area.width = -this._area.startX + 4;
+            }
+
+            if (this._area.startY + this._area.height > document.documentElement.scrollHeight) {
+                this._area.height = document.documentElement.scrollHeight - this._area.startY - 4;
+            }
+
+            if (this._area.startY + this._area.height < 0) {
+                this._area.height = -this._area.startY + 4;
+            }
+
+            this._resetCanvas();
+            this._drawHighlightLines();
+
+            if (this._state.highlight && Math.abs(this._area.width) > 6 && Math.abs(this._area.height) > 6) {
+                this._drawLines(this._area.startX, this._area.startY, this._area.width, this._area.height);
+                this._ctx.clearRect(this._area.startX, this._area.startY, this._area.width, this._area.height);
+            }
+
+            this._paintArea();
+            this._paintArea(false);
+
+            if (!this._state.highlight && Math.abs(this._area.width) > 6 && Math.abs(this._area.height) > 6) {
+                this._ctx.fillStyle = 'rgba(0,0,0,.5)';
+                this._ctx.fillRect(this._area.startX, this._area.startY, this._area.width, this._area.height);
+            }
+        }
+    };
+    private _highlightElement = ($event: MouseEvent) => {
+        this._highlightedArea = null;
+
+        // We need the 3rd element in the list.
+        if (!this._state.canDraw || this._state.isDrawing) {
+            return;
+        }
+
+        const el = document.elementsFromPoint($event.x, $event.y)[3];
+        if (el) {
+            if (this._options.allowedTags.indexOf(el.nodeName.toLowerCase()) === -1) {
+                this._redraw();
+                this._canvas.style.cursor = 'crosshair';
+                return;
+            }
+
+            this._canvas.style.cursor = 'pointer';
+            const rect = el.getBoundingClientRect();
+            this._highlightedArea = {
+                startX: rect.left + document.documentElement.scrollLeft,
+                startY: rect.top + document.documentElement.scrollTop,
+                width: rect.width,
+                height: rect.height
+            };
+
+            this._redraw();
+
+            if (this._state.highlight) {
+                this._drawLines(
+                    this._highlightedArea.startX, this._highlightedArea.startY, this._highlightedArea.width, this._highlightedArea.height);
+                this._ctx.clearRect(
+                    this._highlightedArea.startX, this._highlightedArea.startY, this._highlightedArea.width, this._highlightedArea.height);
+            }
+
+            this._paintArea();
+
+            if (!this._state.highlight) {
+                this._ctx.fillStyle = 'rgba(0,0,0,.5)';
+                this._ctx.fillRect(
+                    this._highlightedArea.startX, this._highlightedArea.startY, this._highlightedArea.width, this._highlightedArea.height);
+            }
+
+            this._paintArea(false);
+        }
+    };
+    private _addHighlightedElement = ($event: MouseEvent) => {
+        if (this._highlightedArea) {
+            if (Math.abs(this._highlightedArea.width) < 6 || Math.abs(this._highlightedArea.height) < 6) {
+                return;
+            }
+
+            const helper: Helper = {
+                ...this._highlightedArea,
+                highlight: this._state.highlight,
+                index: this._helperIdx++
+            };
+
+            if (helper.width < 0) {
+                helper.startX += helper.width;
+                helper.width *= -1;
+            }
+
+            if (helper.height < 0) {
+                helper.startY += helper.height;
+                helper.height *= -1;
+            }
+
+            this._helperElements.push(this._createHelper(helper));
+            this._helpers.push(helper);
+        }
+    };
+    private _onScroll = () => {
+
+        const x = -document.documentElement.scrollLeft;
+        const y = -document.documentElement.scrollTop;
+        this._canvas.style.left = `${x}px`;
+        this._canvas.style.top = `${y}px`;
+        this._helpersContainer.style.left = `${x}px`;
+        this._helpersContainer.style.top = `${y}px`;
+    };
 
     constructor(options?: FeedbackOptions, html2canvasOptions?: HTML2CanvasOptions) {
         if (options) {
@@ -201,55 +467,30 @@ export class Feedback {
         }
     }
 
-    close = () => {
-        document.removeEventListener('mousemove', this._dragDrag);
-        document.removeEventListener('mouseup', this._dragStop);
-        document.removeEventListener('mouseup', this._drawStop);
-        document.removeEventListener('mousemove', this._drawDraw);
-        document.removeEventListener('keydown', this._closeListener);
-        document.removeEventListener('mousemove', this._highlightElement);
-        document.removeEventListener('click', this._addHighlightedElement);
-        window.removeEventListener('resize', this._resize);
-        // TODO: Should we remove the inner listeners on close?
-        // https://stackoverflow.com/a/37096563/1994803
-        document.body.removeChild(this._root);
-        this._reset();
-    };
-
     _createSelectLabel() {
         const label = document.createElement('label');
-        label.innerText = 'Select Feedback Area';
+        label.innerText = this._options.dropdownLabel;
         label.className = 'selectlabel';
         return label;
     }
 
     _createSelectBox() {
-        var request = new XMLHttpRequest();
-        // Open a new connection, using the GET request on the URL endpoint
-        request.open('GET', 'https://ghibliapi.herokuapp.com/films', true);
-        request.onload = function () {
-            var data = JSON.parse(this.response);
-
-            if (request.status >= 200 && request.status < 400) {
-                data.forEach(movie => {
-                    console.log(movie.title);
-                });
-            } else {
-                console.log('error');
-            }
-        };
-
-        var selectoptions = ['option1', 'option2', 'option3'];
         const select = document.createElement('select');
-        select.name = 'status';
-        var opt;
-        // console.log(selectoptions);
-        for (var i in selectoptions) {
-            opt = document.createElement("option");
-            opt.text = selectoptions[i];
-            opt.value = selectoptions[i];
-            select.add(opt);
-        }
+        select.name = 'feedbackType';
+        select.id = 'feedbackType';
+        fetch(this._options.dropdownEndpoint, {headers: this.getHeaders()})
+            .then(response => response.json())
+            .then(response => {
+                console.log(response);
+                if (response.result) {
+                    response.result.forEach(option => {
+                        const opt = document.createElement("option");
+                        opt.value = option['id'];
+                        opt.text = option['optionText'];
+                        select.add(opt);
+                    });
+                }
+            });
         return select;
     }
 
@@ -271,26 +512,33 @@ export class Feedback {
         return root;
     }
 
-    private _send() {
-        this._state.sending = true;
-
-        this._showSending();
-
-        let headers = new Headers();
+    private getHeaders() {
+        const headers = new Headers();
         headers.append('Content-Type', 'application/json');
         if (this._options.headers) {
             this._options.headers.forEach((value, key) => {
                 headers.append(key, value);
             });
         }
+        return headers;
+    }
+
+    private _send() {
+        this._state.sending = true;
+        this._showSending();
+
+        const select = <HTMLSelectElement> document.getElementById('feedbackType');
+        const lookupValueId = select.options[select.selectedIndex].value;
         const data = {
+            browserDetails: 'test-browser-details',
+            url: window.location.href,
+            lookupValueId: lookupValueId,
             description: this._form[0]['value'],
             screenshot: this._screenshotCanvas.toDataURL()
         };
-
         fetch(this._options.endpoint, {
             method: 'POST',
-            headers: headers,
+            headers: this.getHeaders(),
             body: JSON.stringify(data)
         })
             .then(resp => {
@@ -306,27 +554,6 @@ export class Feedback {
                 this._showError();
             });
     }
-
-    private _closeListener = ($event: KeyboardEvent) => {
-        if ($event.key === 'Escape') {
-            this.close();
-        }
-    };
-
-    private _toggleScreenshot = ($event: MouseEvent) => {
-        $event.preventDefault();
-        this._state.includeScreenshot = !this._state.includeScreenshot;
-        this._checkbox.checked = this._state.includeScreenshot;
-        this._checkboxSvg.setAttributeNS(null, 'fill', this._state.includeScreenshot ? this._checkedColor : this._uncheckedColor);
-        this._checkboxSvgPath.setAttributeNS(null, 'd', this._state.includeScreenshot ? this._checkedPath : this._uncheckedPath);
-
-        if (!this._state.includeScreenshot) {
-            this._form.removeChild(this._screenshotContainer);
-        } else {
-            this._form.insertBefore(this._createScreenshotContainer(), this._footnoteContainer);
-            this._genScreenshot();
-        }
-    };
 
     private _genScreenshot() {
         this._html2canvasOptions = {
@@ -350,25 +577,6 @@ export class Feedback {
             this._redraw();
         });
     }
-
-    private _openDrawer = () => {
-        this._state.canDraw = true;
-        this._canvas.classList.add('active');
-        this._formContainer.style.display = 'none';
-        this._root.appendChild(this._createDrawOptions());
-        document.addEventListener('mousemove', this._highlightElement);
-        document.addEventListener('click', this._addHighlightedElement);
-    };
-
-    private _closeDrawer = () => {
-        this._state.canDraw = false;
-        this._canvas.classList.remove('active');
-        this._root.removeChild(this._drawOptions);
-        this._formContainer.style.display = 'block';
-        document.removeEventListener('mousemove', this._highlightElement);
-        document.removeEventListener('click', this._addHighlightedElement);
-        this._genScreenshot();
-    };
 
     private _createHeader(): HTMLDivElement {
         const header = document.createElement('div');
@@ -418,16 +626,6 @@ export class Feedback {
         this._resetCanvas();
         return canvas;
     }
-
-    private _resize = () => {
-        const width = document.documentElement.scrollWidth;
-        const height = document.documentElement.scrollHeight;
-        this._canvas.width = width;
-        this._canvas.height = height;
-        this._helpersContainer.style.width = `${width}px`;
-        this._helpersContainer.style.height = `${height}px`;
-        this._redraw();
-    };
 
     private _createTextarea(): HTMLTextAreaElement {
         const textarea = document.createElement('textarea');
@@ -575,141 +773,6 @@ export class Feedback {
         return helpersContainer;
     }
 
-    private _dragStart = ($event: MouseEvent) => {
-        if (!this._state.isDragging) {
-            this._state.isDragging = true;
-            this._drawOptionsPos.startX = $event.clientX;
-            this._drawOptionsPos.startY = $event.clientY;
-
-            const rect = this._drawOptions.getBoundingClientRect();
-            this._drawOptionsPos.limits.xNeg = -rect.left;
-            this._drawOptionsPos.limits.xPos = document.documentElement.clientWidth - rect.right;
-            this._drawOptionsPos.limits.yNeg = -rect.top;
-            this._drawOptionsPos.limits.yPos = document.documentElement.clientHeight - rect.bottom;
-        }
-    };
-
-    private _dragDrag = ($event: MouseEvent) => {
-        if (this._state.isDragging) {
-            $event.preventDefault();
-
-            let nextX = $event.clientX - this._drawOptionsPos.startX;
-            let nextY = $event.clientY - this._drawOptionsPos.startY;
-
-            if (nextX < this._drawOptionsPos.limits.xNeg) {
-                nextX = this._drawOptionsPos.limits.xNeg;
-            }
-
-            if (nextX > this._drawOptionsPos.limits.xPos) {
-                nextX = this._drawOptionsPos.limits.xPos;
-            }
-
-            if (nextY < this._drawOptionsPos.limits.yNeg) {
-                nextY = this._drawOptionsPos.limits.yNeg;
-            }
-
-            if (nextY > this._drawOptionsPos.limits.yPos) {
-                nextY = this._drawOptionsPos.limits.yPos;
-            }
-
-            nextX = Math.round(nextX);
-            nextY = Math.round(nextY);
-
-            this._drawOptionsPos.nextTransform = `translate(${nextX}px, ${nextY}px)`;
-            this._drawOptions.style.transform = `${this._drawOptionsPos.currTransform} ${this._drawOptionsPos.nextTransform}`;
-            this._state.dragged = true;
-        }
-    };
-
-    private _dragStop = ($event: MouseEvent) => {
-        this._state.isDragging = false;
-        if (this._state.dragged) {
-            this._drawOptionsPos.currTransform = `${this._drawOptionsPos.currTransform} ${this._drawOptionsPos.nextTransform}`;
-            this._state.dragged = false;
-        }
-    };
-
-    private _drawStart = ($event: MouseEvent) => {
-        if (this._state.canDraw) {
-            this._state.isDrawing = true;
-            this._area = {
-                startX: $event.clientX + document.documentElement.scrollLeft,
-                startY: $event.clientY + document.documentElement.scrollTop,
-                width: 0,
-                height: 0
-            };
-        }
-    };
-
-    private _drawStop = ($event: MouseEvent) => {
-        if (this._state.canDraw) {
-            this._state.isDrawing = false;
-
-            if (Math.abs(this._area.width) < 6 || Math.abs(this._area.height) < 6) {
-                return;
-            }
-
-            const helper: Helper = {...this._area, highlight: this._state.highlight, index: this._helperIdx++};
-
-            if (helper.width < 0) {
-                helper.startX += helper.width;
-                helper.width *= -1;
-            }
-
-            if (helper.height < 0) {
-                helper.startY += helper.height;
-                helper.height *= -1;
-            }
-
-            this._area = {...this._initArea};
-            this._helperElements.push(this._createHelper(helper));
-            this._helpers.push(helper);
-            this._redraw();
-        }
-    };
-
-    private _drawDraw = ($event: MouseEvent) => {
-        $event.preventDefault();
-
-        if (this._state.isDrawing) {
-            this._area.width = $event.clientX - this._area.startX + document.documentElement.scrollLeft;
-            this._area.height = $event.clientY - this._area.startY + document.documentElement.scrollTop;
-
-            // TODO: constant '4' should be lineWidth - also should be optional
-            if (this._area.startX + this._area.width > document.documentElement.scrollWidth) {
-                this._area.width = document.documentElement.scrollWidth - this._area.startX - 4;
-            }
-
-            if (this._area.startX + this._area.width < 0) {
-                this._area.width = -this._area.startX + 4;
-            }
-
-            if (this._area.startY + this._area.height > document.documentElement.scrollHeight) {
-                this._area.height = document.documentElement.scrollHeight - this._area.startY - 4;
-            }
-
-            if (this._area.startY + this._area.height < 0) {
-                this._area.height = -this._area.startY + 4;
-            }
-
-            this._resetCanvas();
-            this._drawHighlightLines();
-
-            if (this._state.highlight && Math.abs(this._area.width) > 6 && Math.abs(this._area.height) > 6) {
-                this._drawLines(this._area.startX, this._area.startY, this._area.width, this._area.height);
-                this._ctx.clearRect(this._area.startX, this._area.startY, this._area.width, this._area.height);
-            }
-
-            this._paintArea();
-            this._paintArea(false);
-
-            if (!this._state.highlight && Math.abs(this._area.width) > 6 && Math.abs(this._area.height) > 6) {
-                this._ctx.fillStyle = 'rgba(0,0,0,.5)';
-                this._ctx.fillRect(this._area.startX, this._area.startY, this._area.width, this._area.height);
-            }
-        }
-    };
-
     private _resetCanvas() {
         this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
         this._ctx.fillStyle = 'rgba(102,102,102,.5)';
@@ -826,89 +889,6 @@ export class Feedback {
         this._helpersContainer.appendChild(h);
         return h;
     }
-
-    private _highlightElement = ($event: MouseEvent) => {
-        this._highlightedArea = null;
-
-        // We need the 3rd element in the list.
-        if (!this._state.canDraw || this._state.isDrawing) {
-            return;
-        }
-
-        const el = document.elementsFromPoint($event.x, $event.y)[3];
-        if (el) {
-            if (this._options.allowedTags.indexOf(el.nodeName.toLowerCase()) === -1) {
-                this._redraw();
-                this._canvas.style.cursor = 'crosshair';
-                return;
-            }
-
-            this._canvas.style.cursor = 'pointer';
-            const rect = el.getBoundingClientRect();
-            this._highlightedArea = {
-                startX: rect.left + document.documentElement.scrollLeft,
-                startY: rect.top + document.documentElement.scrollTop,
-                width: rect.width,
-                height: rect.height
-            };
-
-            this._redraw();
-
-            if (this._state.highlight) {
-                this._drawLines(
-                    this._highlightedArea.startX, this._highlightedArea.startY, this._highlightedArea.width, this._highlightedArea.height);
-                this._ctx.clearRect(
-                    this._highlightedArea.startX, this._highlightedArea.startY, this._highlightedArea.width, this._highlightedArea.height);
-            }
-
-            this._paintArea();
-
-            if (!this._state.highlight) {
-                this._ctx.fillStyle = 'rgba(0,0,0,.5)';
-                this._ctx.fillRect(
-                    this._highlightedArea.startX, this._highlightedArea.startY, this._highlightedArea.width, this._highlightedArea.height);
-            }
-
-            this._paintArea(false);
-        }
-    };
-
-    private _addHighlightedElement = ($event: MouseEvent) => {
-        if (this._highlightedArea) {
-            if (Math.abs(this._highlightedArea.width) < 6 || Math.abs(this._highlightedArea.height) < 6) {
-                return;
-            }
-
-            const helper: Helper = {
-                ...this._highlightedArea,
-                highlight: this._state.highlight,
-                index: this._helperIdx++
-            };
-
-            if (helper.width < 0) {
-                helper.startX += helper.width;
-                helper.width *= -1;
-            }
-
-            if (helper.height < 0) {
-                helper.startY += helper.height;
-                helper.height *= -1;
-            }
-
-            this._helperElements.push(this._createHelper(helper));
-            this._helpers.push(helper);
-        }
-    };
-
-    private _onScroll = () => {
-
-        const x = -document.documentElement.scrollLeft;
-        const y = -document.documentElement.scrollTop;
-        this._canvas.style.left = `${x}px`;
-        this._canvas.style.top = `${y}px`;
-        this._helpersContainer.style.left = `${x}px`;
-        this._helpersContainer.style.top = `${y}px`;
-    };
 
     private _showSending() {
         const container = document.createElement('div');

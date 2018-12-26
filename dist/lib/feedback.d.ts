@@ -4,6 +4,8 @@ export interface FeedbackOptions {
     allowedTags?: string[];
     footnote?: string;
     endpoint: string;
+    dropdownEndpoint: string;
+    dropdownLabel?: string;
     headers?: any;
 }
 export interface HTML2CanvasOptions {
@@ -28,6 +30,7 @@ export interface HTML2CanvasOptions {
     windowHeight?: number;
 }
 export declare class Feedback {
+    close: () => void;
     private _options;
     private _html2canvasOptions;
     private _initState;
@@ -60,23 +63,32 @@ export declare class Feedback {
     private _uncheckedColor;
     private _checkedPath;
     private _uncheckedPath;
+    private _closeListener;
+    private _toggleScreenshot;
+    private _openDrawer;
+    private _closeDrawer;
+    private _resize;
+    private _dragStart;
+    private _dragDrag;
+    private _dragStop;
+    private _drawStart;
+    private _drawStop;
+    private _drawDraw;
+    private _highlightElement;
+    private _addHighlightedElement;
+    private _onScroll;
     constructor(options?: FeedbackOptions, html2canvasOptions?: HTML2CanvasOptions);
     open(): void;
-    close: () => void;
     _createSelectLabel(): HTMLLabelElement;
     _createSelectBox(): HTMLSelectElement;
     private _reset;
     private _createModal;
+    private getHeaders;
     private _send;
-    private _closeListener;
-    private _toggleScreenshot;
     private _genScreenshot;
-    private _openDrawer;
-    private _closeDrawer;
     private _createHeader;
     private _createForm;
     private _createCanvas;
-    private _resize;
     private _createTextarea;
     private _createCheckboxContainer;
     private _createScreenshotContainer;
@@ -84,21 +96,12 @@ export declare class Feedback {
     private _createActionsContainer;
     private _createDrawOptions;
     private _createHelpersContainer;
-    private _dragStart;
-    private _dragDrag;
-    private _dragStop;
-    private _drawStart;
-    private _drawStop;
-    private _drawDraw;
     private _resetCanvas;
     private _drawHighlightLines;
     private _paintArea;
     private _redraw;
     private _drawLines;
     private _createHelper;
-    private _highlightElement;
-    private _addHighlightedElement;
-    private _onScroll;
     private _showSending;
     private _showSent;
     private _showError;
