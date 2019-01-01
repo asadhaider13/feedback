@@ -1,4 +1,6 @@
 import * as html2canvas from 'html2canvas';
+import "es6-promise/auto";
+import "babel-polyfill";
 
 /*
   TODO:
