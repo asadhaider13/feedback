@@ -8371,8 +8371,8 @@ module.exports = g;
 /*! no static exports found */
 /***/ (function(module, exports, __webpack_require__) {
 
-__webpack_require__(/*! D:\Projects\Node JS\feedback\index.ts */"./index.ts-exposed");
-module.exports = __webpack_require__(/*! D:\Projects\Node JS\feedback\lib\feedback.scss */"./lib/feedback.scss");
+__webpack_require__(/*! D:\Projects\Libraries\feedback\index.ts */"./index.ts-exposed");
+module.exports = __webpack_require__(/*! D:\Projects\Libraries\feedback\lib\feedback.scss */"./lib/feedback.scss");
 
 
 /***/ })
