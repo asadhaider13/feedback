@@ -78,12 +78,12 @@
       font-family: Roboto, RobotoDraft, Helvetica, Arial, sans-serif;
       justify-content: flex-start;
       padding: 8px 16px 0px 8px;
-      -webkit-tap-highlight-color: transparent;
+      -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
       width: auto; }
     #feedback-js div.fb-form-container form .fb-checkbox input {
       display: none; }
     #feedback-js div.fb-form-container form .fb-checkbox div {
-      background-color: transparent;
+      background-color: rgba(0, 0, 0, 0);
       border-radius: 50%;
       height: 32px;
       width: 32px;
@@ -200,3 +200,6 @@
     left: 0; }
     #feedback-js .helpers .highlight:hover div {
       background-color: rgba(0, 68, 255, 0.1); }
+
+
+/*# sourceMappingURL=feedback.css.map*/
